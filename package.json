@@ -1,0 +1,13 @@
+{
+  "name": "nba-cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/cli/index.ts",
+    "build": "bun build src/index.ts --outdir dist",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
