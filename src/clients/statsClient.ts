@@ -4,6 +4,9 @@ import {
   STATS_BASE_URL,
   nbaFetchJson,
 } from "../http/nbaHttp";
+import type { ISTStandingsResponse } from "../models/istStandings";
+import type { LeagueStandingsV3Response } from "../models/leagueStandingsV3";
+import type { PlayoffPictureResponse } from "../models/playoffPicture";
 import type { ScoreboardV3Response } from "../models/scoreboardV3";
 import type { ScheduleLeagueV2Response } from "../models/scheduleLeagueV2";
 
@@ -23,6 +26,31 @@ export interface ScheduleLeagueV2Params {
   leagueId?: string;
   useCache?: boolean;
   cacheTtlMs?: number | null;
+}
+
+export type SeasonType =
+  | "Regular Season"
+  | "Pre Season"
+  | "PlayIn"
+  | "Playoffs"
+  | "All Star";
+
+export interface LeagueStandingsV3Params {
+  season: string;
+  seasonType?: SeasonType;
+  seasonYear?: string | null;
+  leagueId?: string;
+}
+
+export interface ISTStandingsParams {
+  season: string;
+  section?: "group" | "wildcard";
+  leagueId?: string;
+}
+
+export interface PlayoffPictureParams {
+  seasonId: string;
+  leagueId?: string;
 }
 
 export class StatsClient {
@@ -79,6 +107,30 @@ export class StatsClient {
     }
 
     return response;
+  }
+
+  async leagueStandingsV3(params: LeagueStandingsV3Params): Promise<LeagueStandingsV3Response> {
+    return this.request<LeagueStandingsV3Response>("leaguestandingsv3", {
+      LeagueID: params.leagueId ?? "00",
+      Season: params.season,
+      SeasonType: params.seasonType ?? "Regular Season",
+      SeasonYear: params.seasonYear ?? "",
+    });
+  }
+
+  async istStandings(params: ISTStandingsParams): Promise<ISTStandingsResponse> {
+    return this.request<ISTStandingsResponse>("iststandings", {
+      LeagueID: params.leagueId ?? "00",
+      Season: params.season,
+      Section: params.section ?? "group",
+    });
+  }
+
+  async playoffPicture(params: PlayoffPictureParams): Promise<PlayoffPictureResponse> {
+    return this.request<PlayoffPictureResponse>("playoffpicture", {
+      LeagueID: params.leagueId ?? "00",
+      SeasonID: params.seasonId,
+    });
   }
 
   private async request<T>(endpoint: string, params: Record<string, string | number | null | undefined>): Promise<T> {
