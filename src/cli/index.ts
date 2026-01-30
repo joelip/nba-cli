@@ -1,5 +1,6 @@
 import { LiveClient } from "../clients/liveClient";
 import { StatsClient, type SeasonType } from "../clients/statsClient";
+import { buildTelegramDailyUpdate } from "../formats/telegram/dailyUpdate";
 import { normalizeISTStandings } from "../normalize/istStandings";
 import { normalizeLeagueStandingsV3 } from "../normalize/leagueStandingsV3";
 import { normalizePlayoffPicture } from "../normalize/playoffPicture";
@@ -12,7 +13,8 @@ type Command =
   | "live"
   | "standings"
   | "ist-standings"
-  | "playoff-picture";
+  | "playoff-picture"
+  | "daily-update";
 
 type ParsedOptions = Record<string, string | boolean>;
 interface ParsedArgs {
@@ -30,7 +32,8 @@ function isCommand(value: string | undefined): value is Command {
     value === "live" ||
     value === "standings" ||
     value === "ist-standings" ||
-    value === "playoff-picture"
+    value === "playoff-picture" ||
+    value === "daily-update"
   );
 }
 
@@ -155,6 +158,51 @@ async function run() {
       console.log(JSON.stringify(normalizePlayoffPicture(response), null, 2));
       return;
     }
+    case "daily-update": {
+      const timeZone =
+        optionValue(options, "timezone") ??
+        optionValue(options, "tz") ??
+        "America/Los_Angeles";
+      const todayISO =
+        optionValue(options, "today") ?? getDateISOInTimeZone(new Date(), timeZone);
+      const yesterdayISO =
+        optionValue(options, "yesterday") ?? shiftDateISO(todayISO, -1);
+      const teamName = optionValue(options, "team") ?? "Kings";
+      const teamCity = optionValue(options, "team-city") ?? "Sacramento";
+      const teamSlug = optionValue(options, "team-slug") ?? "kings";
+
+      const client = new StatsClient();
+      const scoreboardYesterday = await client.scoreboardV3(yesterdayISO);
+      const scoreboardToday = await client.scoreboardV3(todayISO);
+
+      let standings;
+      if (!isTruthyOption(options, "no-standings")) {
+        const season =
+          optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
+        standings = await client.leagueStandingsV3({ season });
+      }
+
+      const message = buildTelegramDailyUpdate({
+        date: {
+          todayISO,
+          yesterdayISO,
+          timeZone,
+        },
+        focusTeam: {
+          name: teamName,
+          city: teamCity,
+          slug: teamSlug,
+        },
+        raw: {
+          scoreboardYesterday,
+          scoreboardToday,
+          standings,
+        },
+      });
+
+      console.log(message);
+      return;
+    }
     case "live": {
       const client = new LiveClient();
       const response = await client.todaysScoreboard();
@@ -182,6 +230,7 @@ Commands:
   playoff-picture [ID]      Fetch playoff picture (normalized by default)
                             SeasonId format: 2YYYY (example: 22025)
   live                      Fetch today's live scoreboard (raw JSON)
+  daily-update              Build Telegram daily update message
 
 Options:
   --raw     Print raw API response JSON
@@ -208,6 +257,9 @@ function printCommandHelp(command: Command) {
       return;
     case "playoff-picture":
       printPlayoffPictureHelp();
+      return;
+    case "daily-update":
+      printDailyUpdateHelp();
       return;
     case "live":
       printLiveHelp();
@@ -299,6 +351,25 @@ Options:
 `);
 }
 
+function printDailyUpdateHelp() {
+  console.log(`daily-update
+
+Usage:
+  ./nba-cli daily-update [options]
+
+Options:
+  --today        Date in YYYY-MM-DD format (defaults to today in PT).
+  --yesterday    Date in YYYY-MM-DD format (defaults to yesterday in PT).
+  --timezone     IANA timezone (default: America/Los_Angeles).
+  --season       Season in YYYY-YY format for standings (default: derived from today).
+  --no-standings Skip standings fetch (lottery section will note missing data).
+  --team         Focus team name (default: Kings).
+  --team-city    Focus team city (default: Sacramento).
+  --team-slug    Focus team slug (default: kings).
+  -h, --help     Show this help message.
+`);
+}
+
 function printLiveHelp() {
   console.log(`live
 
@@ -365,6 +436,38 @@ function parseSeasonType(value?: string): SeasonType | undefined {
   return SEASON_TYPES.includes(value as SeasonType)
     ? (value as SeasonType)
     : undefined;
+}
+
+function getDateISOInTimeZone(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+
+  return `${year}-${month}-${day}`;
+}
+
+function shiftDateISO(dateISO: string, deltaDays: number): string {
+  const base = new Date(`${dateISO}T00:00:00Z`);
+  if (Number.isNaN(base.getTime())) {
+    return dateISO;
+  }
+  const shifted = new Date(base.getTime() + deltaDays * 24 * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function deriveSeasonFromDate(dateISO: string): string {
+  const year = Number.parseInt(dateISO.slice(0, 4), 10);
+  const month = Number.parseInt(dateISO.slice(5, 7), 10);
+  const seasonYear = month <= 9 ? year - 1 : year;
+  const nextYearShort = String(seasonYear + 1).slice(2);
+  return `${seasonYear}-${nextYearShort}`;
 }
 
 run().catch((error) => {

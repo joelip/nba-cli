@@ -9,6 +9,8 @@ export type RowFromHeaders<H extends readonly string[]> = {
   [K in H[number]]: StatsResultSetValue;
 };
 
+export type LooseRow = Record<string, StatsResultSetValue>;
+
 export function getResultSet(
   response: StatsResultSetsResponse,
   name: string,
@@ -33,6 +35,10 @@ export function normalizeResultSet<H extends readonly string[]>(
 ): RowFromHeaders<H>[] {
   assertHeadersMatch(resultSet.headers, expectedHeaders);
   return mapRows(expectedHeaders, resultSet.rowSet);
+}
+
+export function normalizeResultSetLoose(resultSet: StatsResultSet): LooseRow[] {
+  return mapRows(resultSet.headers, resultSet.rowSet);
 }
 
 export function mapRows<H extends readonly string[]>(

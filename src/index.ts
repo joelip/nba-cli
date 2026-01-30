@@ -15,5 +15,7 @@ export * from "./normalize/leagueStandingsV3";
 export * from "./normalize/playoffPicture";
 export * from "./normalize/istStandings";
 export * from "./normalize/statsResultSets";
+export * from "./formats/telegram/dailyUpdate";
+export * from "./formats/telegram/types";
 
 export { FileCache } from "./cache/fileCache";
