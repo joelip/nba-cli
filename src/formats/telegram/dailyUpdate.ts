@@ -138,9 +138,9 @@ function formatDailyUpdate(payload: DailyUpdatePayload, focusTeamName: string): 
     lines.push(`**🎰 ${payload.lotteryWatch.title}:**`);
     for (const line of payload.lotteryWatch.lines) {
       if (line.highlight) {
-        lines.push(`• **${line.text}**`);
+        lines.push(`**${line.text}**`);
       } else {
-        lines.push(`• ${line.text}`);
+        lines.push(line.text);
       }
     }
   } else {
