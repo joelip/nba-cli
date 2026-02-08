@@ -84,7 +84,7 @@ SeasonId format: `2YYYY` (example: `22025`).
 
 #### `daily-update`
 
-Build the Telegram daily update message (all games, PT times, lottery watch).
+Build the full Telegram daily update message (yesterday's results + tonight's games + lottery watch).
 
 ```bash
 ./nba-cli daily-update
@@ -92,6 +92,25 @@ Build the Telegram daily update message (all games, PT times, lottery watch).
 ./nba-cli daily-update --season 2025-26
 ./nba-cli daily-update --no-standings
 ./nba-cli daily-update --team "Kings" --team-city "Sacramento" --team-slug "kings"
+```
+
+#### `yesterdays-results`
+
+Build the morning-style Telegram update (yesterday's results + lottery watch).
+
+```bash
+./nba-cli yesterdays-results
+./nba-cli yesterdays-results --today 2026-01-30 --yesterday 2026-01-29
+./nba-cli yesterdays-results --season 2025-26
+```
+
+#### `todays-schedule`
+
+Build the afternoon-style Telegram update (tonight's games).
+
+```bash
+./nba-cli todays-schedule
+./nba-cli todays-schedule --today 2026-01-30 --yesterday 2026-01-29
 ```
 
 Options:

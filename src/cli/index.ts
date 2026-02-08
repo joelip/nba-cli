@@ -1,6 +1,11 @@
 import { LiveClient } from "../clients/liveClient";
 import { StatsClient, type SeasonType } from "../clients/statsClient";
-import { buildTelegramDailyUpdate } from "../formats/telegram/dailyUpdate";
+import {
+  buildDailyUpdatePayload,
+  formatAfternoonUpdate,
+  formatDailyUpdate,
+  formatMorningUpdate,
+} from "../formats/telegram/dailyUpdate";
 import { normalizeISTStandings } from "../normalize/istStandings";
 import { normalizeLeagueStandingsV3 } from "../normalize/leagueStandingsV3";
 import { normalizePlayoffPicture } from "../normalize/playoffPicture";
@@ -14,12 +19,19 @@ type Command =
   | "standings"
   | "ist-standings"
   | "playoff-picture"
-  | "daily-update";
+  | "daily-update"
+  | "yesterdays-results"
+  | "todays-schedule";
 
 type ParsedOptions = Record<string, string | boolean>;
 interface ParsedArgs {
   positionals: string[];
   options: ParsedOptions;
+}
+
+interface DailyUpdateCommandContext {
+  payload: ReturnType<typeof buildDailyUpdatePayload>;
+  teamName: string;
 }
 
 const args = Bun.argv.slice(2);
@@ -33,7 +45,9 @@ function isCommand(value: string | undefined): value is Command {
     value === "standings" ||
     value === "ist-standings" ||
     value === "playoff-picture" ||
-    value === "daily-update"
+    value === "daily-update" ||
+    value === "yesterdays-results" ||
+    value === "todays-schedule"
   );
 }
 
@@ -159,48 +173,18 @@ async function run() {
       return;
     }
     case "daily-update": {
-      const timeZone =
-        optionValue(options, "timezone") ??
-        optionValue(options, "tz") ??
-        "America/Los_Angeles";
-      const todayISO =
-        optionValue(options, "today") ?? getDateISOInTimeZone(new Date(), timeZone);
-      const yesterdayISO =
-        optionValue(options, "yesterday") ?? shiftDateISO(todayISO, -1);
-      const teamName = optionValue(options, "team") ?? "Kings";
-      const teamCity = optionValue(options, "team-city") ?? "Sacramento";
-      const teamSlug = optionValue(options, "team-slug") ?? "kings";
-
-      const client = new StatsClient();
-      const scoreboardYesterday = await client.scoreboardV3(yesterdayISO);
-      const scoreboardToday = await client.scoreboardV3(todayISO);
-
-      let standings;
-      if (!isTruthyOption(options, "no-standings")) {
-        const season =
-          optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
-        standings = await client.leagueStandingsV3({ season });
-      }
-
-      const message = buildTelegramDailyUpdate({
-        date: {
-          todayISO,
-          yesterdayISO,
-          timeZone,
-        },
-        focusTeam: {
-          name: teamName,
-          city: teamCity,
-          slug: teamSlug,
-        },
-        raw: {
-          scoreboardYesterday,
-          scoreboardToday,
-          standings,
-        },
-      });
-
-      console.log(message);
+      const { payload, teamName } = await buildDailyUpdateCommandContext(options);
+      console.log(formatDailyUpdate(payload, teamName));
+      return;
+    }
+    case "yesterdays-results": {
+      const { payload, teamName } = await buildDailyUpdateCommandContext(options);
+      console.log(formatMorningUpdate(payload, teamName));
+      return;
+    }
+    case "todays-schedule": {
+      const { payload } = await buildDailyUpdateCommandContext(options);
+      console.log(formatAfternoonUpdate(payload));
       return;
     }
     case "live": {
@@ -230,6 +214,8 @@ Commands:
   playoff-picture [ID]      Fetch playoff picture (normalized by default)
                             SeasonId format: 2YYYY (example: 22025)
   live                      Fetch today's live scoreboard (raw JSON)
+  yesterdays-results        Build Telegram yesterday results + lottery message
+  todays-schedule           Build Telegram today's schedule message
   daily-update              Build Telegram daily update message
 
 Options:
@@ -260,6 +246,12 @@ function printCommandHelp(command: Command) {
       return;
     case "daily-update":
       printDailyUpdateHelp();
+      return;
+    case "yesterdays-results":
+      printYesterdaysResultsHelp();
+      return;
+    case "todays-schedule":
+      printTodaysScheduleHelp();
       return;
     case "live":
       printLiveHelp();
@@ -370,6 +362,44 @@ Options:
 `);
 }
 
+function printYesterdaysResultsHelp() {
+  console.log(`yesterdays-results
+
+Usage:
+  ./nba-cli yesterdays-results [options]
+
+Options:
+  --today        Date in YYYY-MM-DD format (defaults to today in PT).
+  --yesterday    Date in YYYY-MM-DD format (defaults to yesterday in PT).
+  --timezone     IANA timezone (default: America/Los_Angeles).
+  --season       Season in YYYY-YY format for standings (default: derived from today).
+  --no-standings Skip standings fetch (lottery section will note missing data).
+  --team         Focus team name (default: Kings).
+  --team-city    Focus team city (default: Sacramento).
+  --team-slug    Focus team slug (default: kings).
+  -h, --help     Show this help message.
+`);
+}
+
+function printTodaysScheduleHelp() {
+  console.log(`todays-schedule
+
+Usage:
+  ./nba-cli todays-schedule [options]
+
+Options:
+  --today        Date in YYYY-MM-DD format (defaults to today in PT).
+  --yesterday    Date in YYYY-MM-DD format (defaults to yesterday in PT).
+  --timezone     IANA timezone (default: America/Los_Angeles).
+  --season       Season in YYYY-YY format for standings (default: derived from today).
+  --no-standings Skip standings fetch.
+  --team         Focus team name (default: Kings).
+  --team-city    Focus team city (default: Sacramento).
+  --team-slug    Focus team slug (default: kings).
+  -h, --help     Show this help message.
+`);
+}
+
 function printLiveHelp() {
   console.log(`live
 
@@ -436,6 +466,54 @@ function parseSeasonType(value?: string): SeasonType | undefined {
   return SEASON_TYPES.includes(value as SeasonType)
     ? (value as SeasonType)
     : undefined;
+}
+
+async function buildDailyUpdateCommandContext(
+  options: ParsedOptions,
+): Promise<DailyUpdateCommandContext> {
+  const timeZone =
+    optionValue(options, "timezone") ??
+    optionValue(options, "tz") ??
+    "America/Los_Angeles";
+  const todayISO =
+    optionValue(options, "today") ?? getDateISOInTimeZone(new Date(), timeZone);
+  const yesterdayISO = optionValue(options, "yesterday") ?? shiftDateISO(todayISO, -1);
+  const teamName = optionValue(options, "team") ?? "Kings";
+  const teamCity = optionValue(options, "team-city") ?? "Sacramento";
+  const teamSlug = optionValue(options, "team-slug") ?? "kings";
+
+  const client = new StatsClient();
+  const scoreboardYesterday = await client.scoreboardV3(yesterdayISO);
+  const scoreboardToday = await client.scoreboardV3(todayISO);
+
+  let standings;
+  if (!isTruthyOption(options, "no-standings")) {
+    const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
+    standings = await client.leagueStandingsV3({ season });
+  }
+
+  const input = {
+    date: {
+      todayISO,
+      yesterdayISO,
+      timeZone,
+    },
+    focusTeam: {
+      name: teamName,
+      city: teamCity,
+      slug: teamSlug,
+    },
+    raw: {
+      scoreboardYesterday,
+      scoreboardToday,
+      standings,
+    },
+  };
+
+  return {
+    payload: buildDailyUpdatePayload(input),
+    teamName,
+  };
 }
 
 function getDateISOInTimeZone(date: Date, timeZone: string): string {
