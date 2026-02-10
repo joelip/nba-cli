@@ -173,7 +173,7 @@ function buildTonightGamesLines(payload: DailyUpdatePayload): string[] {
   lines.push(`**Tonight's Games (${payload.headerDate}):**`);
 
   for (const game of payload.tonightGames) {
-    lines.push(`• ${game.timePacific} — ${game.away} @ ${game.home} — **${game.broadcast}**`);
+    lines.push(`• ${game.timePacific} — **${game.away} @ ${game.home}** — ${game.broadcast}`);
   }
 
   return lines;
