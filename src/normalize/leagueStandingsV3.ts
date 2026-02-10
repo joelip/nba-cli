@@ -1,7 +1,7 @@
 import type { LeagueStandingsV3Response } from "../models/leagueStandingsV3";
 import {
   getResultSet,
-  normalizeResultSet,
+  normalizeResultSetProject,
   type RowFromHeaders,
 } from "./statsResultSets";
 
@@ -123,6 +123,17 @@ const LEAGUE_STANDINGS_V3_HEADERS = [
   "Seeding_Game_8_Label",
 ] as const;
 
+const LEAGUE_STANDINGS_V3_REQUIRED_HEADERS = [
+  "TeamID",
+  "TeamCity",
+  "TeamName",
+  "TeamSlug",
+  "WINS",
+  "LOSSES",
+  "WinPCT",
+  "Record",
+] as const;
+
 export type LeagueStandingsV3Row = RowFromHeaders<typeof LEAGUE_STANDINGS_V3_HEADERS>;
 
 export function normalizeLeagueStandingsV3(
@@ -133,5 +144,9 @@ export function normalizeLeagueStandingsV3(
     throw new Error("Standings result set not found in leaguestandingsv3 response.");
   }
 
-  return normalizeResultSet(resultSet, LEAGUE_STANDINGS_V3_HEADERS);
+  return normalizeResultSetProject(
+    resultSet,
+    LEAGUE_STANDINGS_V3_HEADERS,
+    LEAGUE_STANDINGS_V3_REQUIRED_HEADERS,
+  );
 }

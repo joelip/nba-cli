@@ -37,6 +37,36 @@ export function normalizeResultSet<H extends readonly string[]>(
   return mapRows(expectedHeaders, resultSet.rowSet);
 }
 
+export function normalizeResultSetProject<H extends readonly string[]>(
+  resultSet: StatsResultSet,
+  expectedHeaders: H,
+  requiredHeaders: readonly string[] = expectedHeaders,
+): RowFromHeaders<H>[] {
+  const missingHeaders = requiredHeaders.filter(
+    (header) => !resultSet.headers.includes(header),
+  );
+  if (missingHeaders.length > 0) {
+    throw new Error(
+      `Missing required headers: ${missingHeaders.join(", ")}`,
+    );
+  }
+
+  return resultSet.rowSet.map((row) => {
+    const rowByHeader: Record<string, StatsResultSetValue> = {};
+    for (let i = 0; i < resultSet.headers.length; i += 1) {
+      const key = resultSet.headers[i];
+      rowByHeader[key] = (row[i] ?? null) as StatsResultSetValue;
+    }
+
+    const record = {} as RowFromHeaders<H>;
+    for (let i = 0; i < expectedHeaders.length; i += 1) {
+      const key = expectedHeaders[i];
+      record[key] = rowByHeader[key] ?? null;
+    }
+    return record;
+  });
+}
+
 export function normalizeResultSetLoose(resultSet: StatsResultSet): LooseRow[] {
   return mapRows(resultSet.headers, resultSet.rowSet);
 }

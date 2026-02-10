@@ -33,6 +33,7 @@ export const DEFAULT_LIVE_HEADERS: Record<string, string> = {
 };
 
 export const DEFAULT_TIMEOUT_MS = 30_000;
+const CURL_STATUS_MARKER = "__NBA_CLI_HTTP_STATUS__:";
 
 export function buildUrl(baseUrl: string, endpoint: string, params?: QueryParams): string {
   const trimmedBase = baseUrl.replace(/\/$/, "");
@@ -59,10 +60,14 @@ export function buildUrl(baseUrl: string, endpoint: string, params?: QueryParams
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
+  return parseJsonText<T>(text, response.status, response.url);
+}
+
+function parseJsonText<T>(text: string, status: number | undefined, url: string): T {
   if (!text) {
     throw new NBAHttpError("Empty response body", {
-      status: response.status,
-      url: response.url,
+      status,
+      url,
     });
   }
 
@@ -70,11 +75,87 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
     return JSON.parse(text) as T;
   } catch (error) {
     throw new NBAHttpError("Invalid JSON response", {
-      status: response.status,
-      url: response.url,
+      status,
+      url,
       body: text,
     });
   }
+}
+
+interface CurlResult {
+  ok: boolean;
+  body: string;
+  status?: number;
+  error?: string;
+}
+
+async function fetchViaCurl(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<CurlResult> {
+  const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+  const args = [
+    "--silent",
+    "--show-error",
+    "--compressed",
+    "--location",
+    "--http1.1",
+    "--max-time",
+    String(timeoutSeconds),
+    "--connect-timeout",
+    String(timeoutSeconds),
+    "--write-out",
+    `\n${CURL_STATUS_MARKER}%{http_code}`,
+  ];
+
+  for (const [key, value] of Object.entries(headers)) {
+    args.push("-H", `${key}: ${value}`);
+  }
+  args.push(url);
+
+  let process: Bun.Subprocess<"pipe", "pipe", "ignore">;
+  try {
+    process = Bun.spawn({
+      cmd: ["curl", ...args],
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to spawn curl";
+    return { ok: false, body: "", error: message };
+  }
+
+  const [stdout, stderr, exitCode] = await Promise.all([
+    process.stdout ? new Response(process.stdout).text() : Promise.resolve(""),
+    process.stderr ? new Response(process.stderr).text() : Promise.resolve(""),
+    process.exited,
+  ]);
+
+  if (exitCode !== 0) {
+    return {
+      ok: false,
+      body: "",
+      error: stderr.trim() || `curl exited with code ${exitCode}`,
+    };
+  }
+
+  const marker = `\n${CURL_STATUS_MARKER}`;
+  const markerIndex = stdout.lastIndexOf(marker);
+  if (markerIndex === -1) {
+    return { ok: false, body: stdout, error: "curl output missing status marker" };
+  }
+
+  const body = stdout.slice(0, markerIndex);
+  const statusText = stdout.slice(markerIndex + marker.length).trim();
+  const status = Number.parseInt(statusText, 10);
+
+  if (!Number.isFinite(status)) {
+    return { ok: false, body, error: `curl returned invalid status: ${statusText}` };
+  }
+
+  return { ok: status >= 200 && status < 300, body, status };
 }
 
 export async function nbaFetchJson<T>(options: HttpRequestOptions): Promise<T> {
@@ -121,7 +202,27 @@ export async function nbaFetchJson<T>(options: HttpRequestOptions): Promise<T> {
       if (error instanceof NBAHttpError) {
         throw error;
       }
-      throw new NBAHttpError("Request failed", { url });
+
+      const curlResult = await fetchViaCurl(url, requestHeaders, timeoutMs);
+      if (curlResult.ok) {
+        return parseJsonText<T>(curlResult.body, curlResult.status, url);
+      }
+      if (curlResult.status !== undefined) {
+        throw new NBAHttpError(`Request failed with status ${curlResult.status}`, {
+          status: curlResult.status,
+          url,
+          body: curlResult.body,
+        });
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown fetch error";
+      const curlErrorMessage = curlResult.error
+        ? `; curl fallback failed: ${curlResult.error}`
+        : "";
+      throw new NBAHttpError(`Request failed: ${errorMessage}${curlErrorMessage}`, {
+        url,
+      });
     } finally {
       // AbortSignal.timeout handles cleanup internally.
     }
