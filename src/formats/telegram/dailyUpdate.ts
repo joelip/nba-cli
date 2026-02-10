@@ -113,11 +113,49 @@ function buildLotteryWatch(input: DailyUpdateInput): DailyUpdatePayload["lottery
   };
 }
 
-function formatDailyUpdate(payload: DailyUpdatePayload, focusTeamName: string): string {
+export function formatMorningUpdate(payload: DailyUpdatePayload, focusTeamName: string): string {
   const lines: string[] = [];
 
-  lines.push(`🏀 **NBA Daily Update — ${payload.headerDate}**`);
+  lines.push(...buildHeaderLine(payload));
   lines.push("");
+  lines.push(...buildLastNightResultsLines(payload));
+  lines.push("");
+  lines.push(...buildLotteryWatchLines(payload, focusTeamName));
+
+  return lines.join("\n");
+}
+
+export function formatAfternoonUpdate(payload: DailyUpdatePayload): string {
+  const lines: string[] = [];
+
+  lines.push(...buildHeaderLine(payload));
+  lines.push("");
+  lines.push(...buildTonightGamesLines(payload));
+
+  return lines.join("\n");
+}
+
+export function formatDailyUpdate(payload: DailyUpdatePayload, focusTeamName: string): string {
+  const lines: string[] = [];
+
+  lines.push(...buildHeaderLine(payload));
+  lines.push("");
+  lines.push(...buildLastNightResultsLines(payload));
+  lines.push("");
+  lines.push(...buildTonightGamesLines(payload));
+  lines.push("");
+  lines.push(...buildLotteryWatchLines(payload, focusTeamName));
+
+  return lines.join("\n");
+}
+
+function buildHeaderLine(payload: DailyUpdatePayload): string[] {
+  return [`🏀 **NBA Daily Update — ${payload.headerDate}**`];
+}
+
+function buildLastNightResultsLines(payload: DailyUpdatePayload): string[] {
+  const lines: string[] = [];
+
   lines.push(`**Last Night's Results (${payload.yesterdayDate}):**`);
 
   for (const game of payload.lastNightResults) {
@@ -126,28 +164,38 @@ function formatDailyUpdate(payload: DailyUpdatePayload, focusTeamName: string): 
     lines.push(`  ${game.loser.leaderLine}`);
   }
 
-  lines.push("");
+  return lines;
+}
+
+function buildTonightGamesLines(payload: DailyUpdatePayload): string[] {
+  const lines: string[] = [];
+
   lines.push(`**Tonight's Games (${payload.headerDate}):**`);
 
   for (const game of payload.tonightGames) {
-    lines.push(`• ${game.timePacific} — ${game.away} @ ${game.home} — **${game.broadcast}**`);
+    lines.push(`• ${game.timePacific} — **${game.away} @ ${game.home}** — ${game.broadcast}`);
   }
 
+  return lines;
+}
+
+function buildLotteryWatchLines(payload: DailyUpdatePayload, focusTeamName: string): string[] {
+  const lines: string[] = [];
+
   if (payload.lotteryWatch) {
-    lines.push("");
     lines.push(`**🎰 ${payload.lotteryWatch.title}:**`);
     for (const line of payload.lotteryWatch.lines) {
       if (line.highlight) {
-        lines.push(`• **${line.text}**`);
+        lines.push(`**${line.text}**`);
       } else {
-        lines.push(`• ${line.text}`);
+        lines.push(line.text);
       }
     }
-  } else {
-    lines.push("");
-    lines.push(`**🎰 Draft Lottery Watch (${focusTeamName} +2):**`);
-    lines.push("• No standings data provided.");
+    return lines;
   }
 
-  return lines.join("\n");
+  lines.push(`**🎰 Draft Lottery Watch (${focusTeamName} +2):**`);
+  lines.push("• No standings data provided.");
+
+  return lines;
 }
