@@ -1,5 +1,8 @@
+import { ESPNClient } from "../clients/espnClient";
 import { LiveClient } from "../clients/liveClient";
 import { StatsClient, type SeasonType } from "../clients/statsClient";
+import { espnToScoreboardV3 } from "../normalize/espnToScoreboardV3";
+import { espnToStandings } from "../normalize/espnToStandings";
 import {
   buildDailyUpdatePayload,
   formatAfternoonUpdate,
@@ -482,14 +485,39 @@ async function buildDailyUpdateCommandContext(
   const teamCity = optionValue(options, "team-city") ?? "Sacramento";
   const teamSlug = optionValue(options, "team-slug") ?? "kings";
 
-  const client = new StatsClient();
-  const scoreboardYesterday = await client.scoreboardV3(yesterdayISO);
-  const scoreboardToday = await client.scoreboardV3(todayISO);
-
+  let scoreboardYesterday;
+  let scoreboardToday;
   let standings;
-  if (!isTruthyOption(options, "no-standings")) {
-    const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
-    standings = await client.leagueStandingsV3({ season });
+
+  // Try StatsClient first, fall back to ESPN
+  try {
+    const client = new StatsClient({ timeoutMs: 10_000 });
+    scoreboardYesterday = await client.scoreboardV3(yesterdayISO);
+    scoreboardToday = await client.scoreboardV3(todayISO);
+
+    if (!isTruthyOption(options, "no-standings")) {
+      const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
+      standings = await client.leagueStandingsV3({ season });
+    }
+  } catch (statsError) {
+    console.error(`[nba-cli] stats.nba.com failed, falling back to ESPN: ${statsError instanceof Error ? statsError.message : statsError}`);
+
+    const espn = new ESPNClient();
+    const [espnYesterday, espnToday] = await Promise.all([
+      espn.scoreboard(yesterdayISO),
+      espn.scoreboard(todayISO),
+    ]);
+    scoreboardYesterday = espnToScoreboardV3(espnYesterday, yesterdayISO);
+    scoreboardToday = espnToScoreboardV3(espnToday, todayISO);
+
+    if (!isTruthyOption(options, "no-standings")) {
+      try {
+        const espnStandings = await espn.standings();
+        standings = espnToStandings(espnStandings);
+      } catch (standingsError) {
+        console.error(`[nba-cli] ESPN standings also failed: ${standingsError instanceof Error ? standingsError.message : standingsError}`);
+      }
+    }
   }
 
   const input = {
@@ -504,8 +532,8 @@ async function buildDailyUpdateCommandContext(
       slug: teamSlug,
     },
     raw: {
-      scoreboardYesterday,
-      scoreboardToday,
+      scoreboardYesterday: scoreboardYesterday!,
+      scoreboardToday: scoreboardToday!,
       standings,
     },
   };
