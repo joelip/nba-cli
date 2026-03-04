@@ -1,6 +1,8 @@
 import { ESPNClient } from "../clients/espnClient";
 import { LiveClient } from "../clients/liveClient";
 import { StatsClient, type SeasonType } from "../clients/statsClient";
+import type { ScoreboardV3Response } from "../models/scoreboardV3";
+import type { StatsResultSetsResponse } from "../models/statsResultSets";
 import { espnToScoreboardV3 } from "../normalize/espnToScoreboardV3";
 import { espnToStandings } from "../normalize/espnToStandings";
 import {
@@ -485,37 +487,112 @@ async function buildDailyUpdateCommandContext(
   const teamCity = optionValue(options, "team-city") ?? "Sacramento";
   const teamSlug = optionValue(options, "team-slug") ?? "kings";
 
-  let scoreboardYesterday;
-  let scoreboardToday;
-  let standings;
+  const statsClient = new StatsClient({ timeoutMs: 10_000 });
+  const espnClient = new ESPNClient();
+  let scoreboardYesterday: ScoreboardV3Response | undefined;
+  let scoreboardToday: ScoreboardV3Response | undefined;
+  let standings: StatsResultSetsResponse | undefined;
 
-  // Try StatsClient first, fall back to ESPN
-  try {
-    const client = new StatsClient({ timeoutMs: 10_000 });
-    scoreboardYesterday = await client.scoreboardV3(yesterdayISO);
-    scoreboardToday = await client.scoreboardV3(todayISO);
+  const [yesterdayResult, todayResult] = await Promise.all([
+    statsClient.scoreboardV3(yesterdayISO).then(
+      (response) => ({ response, ok: true }),
+      (error) => {
+        console.error(
+          `[nba-cli] stats.nba.com scoreboard failed for ${yesterdayISO}: ${
+            error instanceof Error ? error.message : error
+          }`,
+        );
+        return { response: undefined as ScoreboardV3Response | undefined, ok: false };
+      },
+    ),
+    statsClient.scoreboardV3(todayISO).then(
+      (response) => ({ response, ok: true }),
+      (error) => {
+        console.error(
+          `[nba-cli] stats.nba.com scoreboard failed for ${todayISO}: ${
+            error instanceof Error ? error.message : error
+          }`,
+        );
+        return { response: undefined as ScoreboardV3Response | undefined, ok: false };
+      },
+    ),
+  ]);
 
-    if (!isTruthyOption(options, "no-standings")) {
-      const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
-      standings = await client.leagueStandingsV3({ season });
-    }
-  } catch (statsError) {
-    console.error(`[nba-cli] stats.nba.com failed, falling back to ESPN: ${statsError instanceof Error ? statsError.message : statsError}`);
+  scoreboardYesterday = yesterdayResult.response;
+  scoreboardToday = todayResult.response;
 
-    const espn = new ESPNClient();
-    const [espnYesterday, espnToday] = await Promise.all([
-      espn.scoreboard(yesterdayISO),
-      espn.scoreboard(todayISO),
+  if (!scoreboardYesterday || !scoreboardToday) {
+    const [espnYesterdayResult, espnTodayResult] = await Promise.all([
+      !scoreboardYesterday
+        ? espnClient.scoreboard(yesterdayISO).then(
+            (response) => ({ response, ok: true }),
+            (error) => {
+              console.error(
+                `[nba-cli] ESPN scoreboard failed for ${yesterdayISO}: ${
+                  error instanceof Error ? error.message : error
+                }`,
+              );
+              return {
+                response: undefined as Awaited<ReturnType<typeof espnClient.scoreboard>> | undefined,
+                ok: false,
+              };
+            },
+          )
+        : Promise.resolve({
+            response: undefined as Awaited<ReturnType<typeof espnClient.scoreboard>> | undefined,
+            ok: true,
+          }),
+      !scoreboardToday
+        ? espnClient.scoreboard(todayISO).then(
+            (response) => ({ response, ok: true }),
+            (error) => {
+              console.error(
+                `[nba-cli] ESPN scoreboard failed for ${todayISO}: ${
+                  error instanceof Error ? error.message : error
+                }`,
+              );
+              return {
+                response: undefined as Awaited<ReturnType<typeof espnClient.scoreboard>> | undefined,
+                ok: false,
+              };
+            },
+          )
+        : Promise.resolve({
+            response: undefined as Awaited<ReturnType<typeof espnClient.scoreboard>> | undefined,
+            ok: true,
+          }),
     ]);
-    scoreboardYesterday = espnToScoreboardV3(espnYesterday, yesterdayISO);
-    scoreboardToday = espnToScoreboardV3(espnToday, todayISO);
 
-    if (!isTruthyOption(options, "no-standings")) {
+    if (!scoreboardYesterday && espnYesterdayResult.ok) {
+      scoreboardYesterday = espnToScoreboardV3(espnYesterdayResult.response, yesterdayISO);
+    }
+    if (!scoreboardToday && espnTodayResult.ok) {
+      scoreboardToday = espnToScoreboardV3(espnTodayResult.response, todayISO);
+    }
+  }
+
+  if (!scoreboardYesterday || !scoreboardToday) {
+    throw new Error("Unable to fetch scoreboard data from stats.nba.com or ESPN fallback.");
+  }
+
+  if (!isTruthyOption(options, "no-standings")) {
+    const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
+    try {
+      standings = await statsClient.leagueStandingsV3({ season });
+    } catch (statsError) {
+      console.error(
+        `[nba-cli] stats.nba.com standings failed, trying ESPN fallback: ${
+          statsError instanceof Error ? statsError.message : statsError
+        }`,
+      );
       try {
-        const espnStandings = await espn.standings();
-        standings = espnToStandings(espnStandings);
+        standings = espnToStandings(await espnClient.standings());
       } catch (standingsError) {
-        console.error(`[nba-cli] ESPN standings also failed: ${standingsError instanceof Error ? standingsError.message : standingsError}`);
+        console.error(
+          `[nba-cli] ESPN standings also failed: ${
+            standingsError instanceof Error ? standingsError.message : standingsError
+          }`,
+        );
       }
     }
   }
@@ -532,8 +609,8 @@ async function buildDailyUpdateCommandContext(
       slug: teamSlug,
     },
     raw: {
-      scoreboardYesterday: scoreboardYesterday!,
-      scoreboardToday: scoreboardToday!,
+      scoreboardYesterday,
+      scoreboardToday,
       standings,
     },
   };

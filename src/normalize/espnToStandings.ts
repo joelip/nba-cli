@@ -9,11 +9,11 @@ export function espnToStandings(espn: ESPNStandingsResponse): StatsResultSetsRes
   const headers = ["TeamCity", "TeamName", "TeamSlug", "WINS", "LOSSES", "WinPCT"];
   const rowSet: (string | number | null)[][] = [];
 
-  for (const conference of espn.children) {
-    for (const entry of conference.standings.entries) {
-      const wins = getStat(entry.stats, "wins");
-      const losses = getStat(entry.stats, "losses");
-      const winPct = getStat(entry.stats, "winPercent");
+  for (const conference of espn.children ?? []) {
+    for (const entry of conference.standings?.entries ?? []) {
+      const wins = getStat(entry.stats, ["wins", "WINS"]);
+      const losses = getStat(entry.stats, ["losses", "LOSSES"]);
+      const winPct = getStat(entry.stats, ["winPercent", "winPct", "W_PCT", "WinPCT"]);
 
       rowSet.push([
         entry.team.location,
@@ -37,6 +37,17 @@ export function espnToStandings(espn: ESPNStandingsResponse): StatsResultSetsRes
   };
 }
 
-function getStat(stats: Array<{ name: string; value: number }>, name: string): number {
-  return stats.find((s) => s.name === name)?.value ?? 0;
+function getStat(stats: Array<{ name: string; abbreviation?: string; displayName?: string; value: number | string }>, names: string[]): number {
+  const stat = stats.find(
+    (candidate) =>
+      names.includes(candidate.name) ||
+      names.includes(candidate.abbreviation ?? "") ||
+      names.includes(candidate.displayName ?? ""),
+  );
+  if (!stat) {
+    return 0;
+  }
+
+  const parsed = Number.parseFloat(String(stat.value));
+  return Number.isNaN(parsed) ? 0 : parsed;
 }

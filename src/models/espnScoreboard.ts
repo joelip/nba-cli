@@ -1,7 +1,7 @@
 /** Minimal types for ESPN NBA Scoreboard & Standings APIs. */
 
 export interface ESPNScoreboardResponse {
-  leagues: unknown[];
+  leagues?: unknown[];
   season: { type: number; year: number };
   day: { date: string };
   events: ESPNEvent[];
@@ -19,20 +19,20 @@ export interface ESPNEvent {
 
 export interface ESPNCompetition {
   id: string;
-  date: string;
-  competitors: ESPNCompetitor[];
-  broadcasts: ESPNBroadcast[];
-  notes: unknown[];
-  status: ESPNStatus;
+  date?: string;
+  competitors?: ESPNCompetitor[] | null;
+  broadcasts?: ESPNBroadcast[] | null;
+  notes?: unknown[] | null;
+  status?: ESPNStatus | null;
 }
 
 export interface ESPNCompetitor {
   id: string;
-  homeAway: "home" | "away";
+  homeAway?: "home" | "away" | string;
   team: ESPNTeam;
-  score: string;
+  score: string | number | null;
   records: ESPNRecord[];
-  leaders?: ESPNLeaderCategory[];
+  leaders?: ESPNLeaderCategory[] | null;
 }
 
 export interface ESPNTeam {
@@ -47,19 +47,25 @@ export interface ESPNTeam {
 export interface ESPNRecord {
   name: string;
   type: string;
-  summary: string; // e.g. "32-24"
+  /**
+   * Win-loss summary from ESPN's standings object, for example "32-24".
+   */
+  summary: string;
 }
 
 export interface ESPNLeaderCategory {
   name: string;
   displayName: string;
+  /**
+   * Category abbreviation in ESPN payload, such as "PTS", "REB", "AST", etc.
+   */
   abbreviation: string;
   leaders: ESPNLeaderEntry[];
 }
 
 export interface ESPNLeaderEntry {
   displayValue: string;
-  value: number;
+  value: number | string;
   athlete: ESPNAthlete;
 }
 
@@ -74,8 +80,12 @@ export interface ESPNAthlete {
 }
 
 export interface ESPNBroadcast {
-  market: string; // "national" | "home" | "away"
-  names: string[];
+  market?: string; // "national" | "home" | "away"
+  type?: {
+    shortName?: string;
+    displayName?: string;
+  };
+  names?: string[] | null;
 }
 
 export interface ESPNStatus {
@@ -83,8 +93,14 @@ export interface ESPNStatus {
   displayClock: string;
   period: number;
   type: {
-    id: string; // "1"=scheduled, "2"=in progress, "3"=final
+    /**
+     * ESPN status code id for game phase: "1" (scheduled), "2" (in progress), "3" (final).
+     */
+    id: string;
     name: string;
+    /**
+     * Broad state bucket for the status (for example: "pre", "in", "post", "halftime", "final").
+     */
     state: string;
     completed: boolean;
     description: string;
@@ -121,6 +137,6 @@ export interface ESPNStat {
   name: string;
   displayName: string;
   abbreviation: string;
-  value: number;
+  value: number | string;
   displayValue: string;
 }
