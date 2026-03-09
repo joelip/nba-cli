@@ -578,7 +578,13 @@ async function buildDailyUpdateCommandContext(
   if (!isTruthyOption(options, "no-standings")) {
     const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
     try {
-      standings = espnToStandings(await espnClient.standings());
+      const espnStandings = espnToStandings(await espnClient.standings());
+      // ESPN sometimes returns empty data — verify we got actual rows
+      const hasRows = espnStandings.resultSets?.some((rs) => rs.rowSet.length > 0);
+      if (!hasRows) {
+        throw new Error("ESPN standings returned empty data");
+      }
+      standings = espnStandings;
     } catch (espnError) {
       console.error(
         `[nba-cli] ESPN standings failed, trying stats.nba.com fallback: ${
