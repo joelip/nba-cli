@@ -218,9 +218,9 @@ Commands:
   playoff-picture [ID]      Fetch playoff picture (normalized by default)
                             SeasonId format: 2YYYY (example: 22025)
   live                      Fetch today's live scoreboard (raw JSON)
-  yesterdays-results        Build Telegram yesterday results + lottery message
-  todays-schedule           Build Telegram today's schedule message
-  daily-update              Build Telegram daily update message
+  yesterdays-results        Build Telegram HTML yesterday results + lottery message
+  todays-schedule           Build Telegram HTML today's schedule message
+  daily-update              Build Telegram HTML daily update message
 
 Options:
   --raw     Print raw API response JSON
@@ -353,6 +353,9 @@ function printDailyUpdateHelp() {
 Usage:
   ./nba-cli daily-update [options]
 
+Output:
+  Telegram HTML markup. Send with parse_mode=HTML.
+
 Options:
   --today        Date in YYYY-MM-DD format (defaults to today in PT).
   --yesterday    Date in YYYY-MM-DD format (defaults to yesterday in PT).
@@ -372,6 +375,9 @@ function printYesterdaysResultsHelp() {
 Usage:
   ./nba-cli yesterdays-results [options]
 
+Output:
+  Telegram HTML markup. Send with parse_mode=HTML.
+
 Options:
   --today        Date in YYYY-MM-DD format (defaults to today in PT).
   --yesterday    Date in YYYY-MM-DD format (defaults to yesterday in PT).
@@ -390,6 +396,9 @@ function printTodaysScheduleHelp() {
 
 Usage:
   ./nba-cli todays-schedule [options]
+
+Output:
+  Telegram HTML markup. Send with parse_mode=HTML.
 
 Options:
   --today        Date in YYYY-MM-DD format (defaults to today in PT).

@@ -10,6 +10,13 @@ export type StandingsRow = Record<string, StatsResultSetValue>;
 
 export const DEFAULT_TIME_ZONE = "America/Los_Angeles";
 
+export function escapeTelegramHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 export function formatTeamName(team: TeamBoxScore): string {
   return `${team.teamCity} ${team.teamName}`;
 }

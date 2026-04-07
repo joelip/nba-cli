@@ -6,6 +6,7 @@ import type {
   TonightGamePayload,
 } from "./types";
 import {
+  escapeTelegramHtml,
   formatBroadcast,
   formatLeaderLine,
   formatPacificTime,
@@ -149,19 +150,25 @@ export function formatDailyUpdate(payload: DailyUpdatePayload, focusTeamName: st
   return lines.join("\n");
 }
 
+function bold(value: string): string {
+  return `<b>${escapeTelegramHtml(value)}</b>`;
+}
+
 function buildHeaderLine(payload: DailyUpdatePayload): string[] {
-  return [`🏀 **NBA Daily Update — ${payload.headerDate}**`];
+  return [bold(`🏀 NBA Daily Update — ${payload.headerDate}`)];
 }
 
 function buildLastNightResultsLines(payload: DailyUpdatePayload): string[] {
   const lines: string[] = [];
 
-  lines.push(`**Last Night's Results (${payload.yesterdayDate}):**`);
+  lines.push(bold(`Last Night's Results (${payload.yesterdayDate}):`));
 
   for (const game of payload.lastNightResults) {
-    lines.push(`• **${game.winner.name} ${game.winner.score} - ${game.loser.name} ${game.loser.score}**`);
-    lines.push(`  ${game.winner.leaderLine}`);
-    lines.push(`  ${game.loser.leaderLine}`);
+    lines.push(
+      `• ${bold(`${game.winner.name} ${game.winner.score} - ${game.loser.name} ${game.loser.score}`)}`,
+    );
+    lines.push(`  ${escapeTelegramHtml(game.winner.leaderLine)}`);
+    lines.push(`  ${escapeTelegramHtml(game.loser.leaderLine)}`);
   }
 
   return lines;
@@ -170,10 +177,12 @@ function buildLastNightResultsLines(payload: DailyUpdatePayload): string[] {
 function buildTonightGamesLines(payload: DailyUpdatePayload): string[] {
   const lines: string[] = [];
 
-  lines.push(`**Tonight's Games (${payload.headerDate}):**`);
+  lines.push(bold(`Tonight's Games (${payload.headerDate}):`));
 
   for (const game of payload.tonightGames) {
-    lines.push(`• ${game.timePacific} — **${game.away} @ ${game.home}** — ${game.broadcast}`);
+    lines.push(
+      `• ${escapeTelegramHtml(game.timePacific)} — ${bold(`${game.away} @ ${game.home}`)} — ${escapeTelegramHtml(game.broadcast)}`,
+    );
   }
 
   return lines;
@@ -183,18 +192,18 @@ function buildLotteryWatchLines(payload: DailyUpdatePayload, focusTeamName: stri
   const lines: string[] = [];
 
   if (payload.lotteryWatch) {
-    lines.push(`**🎰 ${payload.lotteryWatch.title}:**`);
+    lines.push(bold(`🎰 ${payload.lotteryWatch.title}:`));
     for (const line of payload.lotteryWatch.lines) {
       if (line.highlight) {
-        lines.push(`**${line.text}**`);
+        lines.push(bold(line.text));
       } else {
-        lines.push(line.text);
+        lines.push(escapeTelegramHtml(line.text));
       }
     }
     return lines;
   }
 
-  lines.push(`**🎰 Draft Lottery Watch (${focusTeamName} +2):**`);
+  lines.push(bold(`🎰 Draft Lottery Watch (${focusTeamName} +2):`));
   lines.push("• No standings data provided.");
 
   return lines;

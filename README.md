@@ -84,7 +84,7 @@ SeasonId format: `2YYYY` (example: `22025`).
 
 #### `daily-update`
 
-Build the full Telegram daily update message (yesterday's results + tonight's games + lottery watch).
+Build the full Telegram HTML daily update message (yesterday's results + tonight's games + lottery watch).
 
 ```bash
 ./nba-cli daily-update
@@ -94,9 +94,11 @@ Build the full Telegram daily update message (yesterday's results + tonight's ga
 ./nba-cli daily-update --team "Kings" --team-city "Sacramento" --team-slug "kings"
 ```
 
+Send with Telegram `parse_mode=HTML`.
+
 #### `yesterdays-results`
 
-Build the morning-style Telegram update (yesterday's results + lottery watch).
+Build the morning-style Telegram HTML update (yesterday's results + lottery watch).
 
 ```bash
 ./nba-cli yesterdays-results
@@ -104,14 +106,18 @@ Build the morning-style Telegram update (yesterday's results + lottery watch).
 ./nba-cli yesterdays-results --season 2025-26
 ```
 
+Send with Telegram `parse_mode=HTML`.
+
 #### `todays-schedule`
 
-Build the afternoon-style Telegram update (tonight's games).
+Build the afternoon-style Telegram HTML update (tonight's games).
 
 ```bash
 ./nba-cli todays-schedule
 ./nba-cli todays-schedule --today 2026-01-30 --yesterday 2026-01-29
 ```
+
+Send with Telegram `parse_mode=HTML`.
 
 Options:
 - `--today` / `--yesterday`: override dates (YYYY-MM-DD)
