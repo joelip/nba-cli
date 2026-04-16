@@ -183,7 +183,11 @@ async function run() {
     }
     case "yesterdays-results": {
       const { payload, teamName } = await buildDailyUpdateCommandContext(options);
-      console.log(formatMorningUpdate(payload, teamName));
+      console.log(
+        formatMorningUpdate(payload, teamName, {
+          includeLotteryWatch: !isTruthyOption(options, "playoffs"),
+        }),
+      );
       return;
     }
     case "todays-schedule": {
@@ -218,7 +222,7 @@ Commands:
   playoff-picture [ID]      Fetch playoff picture (normalized by default)
                             SeasonId format: 2YYYY (example: 22025)
   live                      Fetch today's live scoreboard (raw JSON)
-  yesterdays-results        Build Telegram yesterday results + lottery message
+  yesterdays-results        Build Telegram yesterday results, optionally without lottery watch
   todays-schedule           Build Telegram today's schedule message
   daily-update              Build Telegram daily update message
 
@@ -381,6 +385,7 @@ Options:
   --team         Focus team name (default: Kings).
   --team-city    Focus team city (default: Sacramento).
   --team-slug    Focus team slug (default: kings).
+  --playoffs     Hide the draft lottery watch section.
   -h, --help     Show this help message.
 `);
 }

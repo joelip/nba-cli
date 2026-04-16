@@ -113,14 +113,22 @@ function buildLotteryWatch(input: DailyUpdateInput): DailyUpdatePayload["lottery
   };
 }
 
-export function formatMorningUpdate(payload: DailyUpdatePayload, focusTeamName: string): string {
+export function formatMorningUpdate(
+  payload: DailyUpdatePayload,
+  focusTeamName: string,
+  options?: { includeLotteryWatch?: boolean },
+): string {
   const lines: string[] = [];
+  const includeLotteryWatch = options?.includeLotteryWatch ?? true;
 
   lines.push(...buildHeaderLine(payload));
   lines.push("");
   lines.push(...buildLastNightResultsLines(payload));
-  lines.push("");
-  lines.push(...buildLotteryWatchLines(payload, focusTeamName));
+
+  if (includeLotteryWatch) {
+    lines.push("");
+    lines.push(...buildLotteryWatchLines(payload, focusTeamName));
+  }
 
   return lines.join("\n");
 }
