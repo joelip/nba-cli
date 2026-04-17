@@ -182,10 +182,13 @@ async function run() {
       return;
     }
     case "yesterdays-results": {
-      const { payload, teamName } = await buildDailyUpdateCommandContext(options);
+      const playoffsMode = isTruthyOption(options, "playoffs");
+      const { payload, teamName } = await buildDailyUpdateCommandContext(options, {
+        skipStandings: playoffsMode,
+      });
       console.log(
         formatMorningUpdate(payload, teamName, {
-          includeLotteryWatch: !isTruthyOption(options, "playoffs"),
+          includeLotteryWatch: !playoffsMode,
         }),
       );
       return;
@@ -479,6 +482,7 @@ function parseSeasonType(value?: string): SeasonType | undefined {
 
 async function buildDailyUpdateCommandContext(
   options: ParsedOptions,
+  config?: { skipStandings?: boolean },
 ): Promise<DailyUpdateCommandContext> {
   const timeZone =
     optionValue(options, "timezone") ??
@@ -580,7 +584,7 @@ async function buildDailyUpdateCommandContext(
   }
 
   // Standings: ESPN first, stats.nba.com fallback
-  if (!isTruthyOption(options, "no-standings")) {
+  if (!isTruthyOption(options, "no-standings") && !config?.skipStandings) {
     const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
     try {
       const espnStandings = espnToStandings(await espnClient.standings());
