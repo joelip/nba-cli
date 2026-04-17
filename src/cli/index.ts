@@ -182,8 +182,15 @@ async function run() {
       return;
     }
     case "yesterdays-results": {
-      const { payload, teamName } = await buildDailyUpdateCommandContext(options);
-      console.log(formatMorningUpdate(payload, teamName));
+      const playoffsMode = isTruthyOption(options, "playoffs");
+      const { payload, teamName } = await buildDailyUpdateCommandContext(options, {
+        skipStandings: playoffsMode,
+      });
+      console.log(
+        formatMorningUpdate(payload, teamName, {
+          includeLotteryWatch: !playoffsMode,
+        }),
+      );
       return;
     }
     case "todays-schedule": {
@@ -218,7 +225,7 @@ Commands:
   playoff-picture [ID]      Fetch playoff picture (normalized by default)
                             SeasonId format: 2YYYY (example: 22025)
   live                      Fetch today's live scoreboard (raw JSON)
-  yesterdays-results        Build Telegram yesterday results + lottery message
+  yesterdays-results        Build Telegram yesterday results, optionally without lottery watch
   todays-schedule           Build Telegram today's schedule message
   daily-update              Build Telegram daily update message
 
@@ -381,6 +388,7 @@ Options:
   --team         Focus team name (default: Kings).
   --team-city    Focus team city (default: Sacramento).
   --team-slug    Focus team slug (default: kings).
+  --playoffs     Hide the draft lottery watch section.
   -h, --help     Show this help message.
 `);
 }
@@ -474,6 +482,7 @@ function parseSeasonType(value?: string): SeasonType | undefined {
 
 async function buildDailyUpdateCommandContext(
   options: ParsedOptions,
+  config?: { skipStandings?: boolean },
 ): Promise<DailyUpdateCommandContext> {
   const timeZone =
     optionValue(options, "timezone") ??
@@ -575,7 +584,7 @@ async function buildDailyUpdateCommandContext(
   }
 
   // Standings: ESPN first, stats.nba.com fallback
-  if (!isTruthyOption(options, "no-standings")) {
+  if (!isTruthyOption(options, "no-standings") && !config?.skipStandings) {
     const season = optionValue(options, "season") ?? deriveSeasonFromDate(todayISO);
     try {
       const espnStandings = espnToStandings(await espnClient.standings());
