@@ -19,6 +19,12 @@ export interface DailyUpdateInput {
   };
 }
 
+export interface AfternoonUpdateInput {
+  todayISO: string;
+  timeZone?: string;
+  scoreboardToday: ScoreboardV3Response;
+}
+
 export interface DailyUpdatePayload {
   headerDate: string;
   yesterdayDate: string;

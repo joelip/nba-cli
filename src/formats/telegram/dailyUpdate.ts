@@ -1,4 +1,5 @@
 import type {
+  AfternoonUpdateInput,
   DailyUpdateInput,
   DailyUpdatePayload,
   LotteryWatchLine,
@@ -26,7 +27,7 @@ export function buildTelegramDailyUpdate(input: DailyUpdateInput): string {
 
 export function buildDailyUpdatePayload(input: DailyUpdateInput): DailyUpdatePayload {
   const lastNightResults = buildLastNightResults(input);
-  const tonightGames = buildTonightGames(input);
+  const tonightGames = buildTonightGames(input.raw.scoreboardToday, input.date.timeZone);
   const lotteryWatch = buildLotteryWatch(input);
 
   return {
@@ -35,6 +36,16 @@ export function buildDailyUpdatePayload(input: DailyUpdateInput): DailyUpdatePay
     lastNightResults,
     tonightGames,
     lotteryWatch,
+  };
+}
+
+export function buildAfternoonUpdatePayload(input: AfternoonUpdateInput): DailyUpdatePayload {
+  return {
+    headerDate: input.todayISO,
+    yesterdayDate: input.todayISO,
+    lastNightResults: [],
+    tonightGames: buildTonightGames(input.scoreboardToday, input.timeZone),
+    lotteryWatch: undefined,
   };
 }
 
@@ -59,9 +70,12 @@ function buildLastNightResults(input: DailyUpdateInput): ResultGamePayload[] {
   });
 }
 
-function buildTonightGames(input: DailyUpdateInput): TonightGamePayload[] {
-  return input.raw.scoreboardToday.scoreboard.games.map((game) => ({
-    timePacific: formatPacificTime(game, input.date.timeZone),
+function buildTonightGames(
+  scoreboardToday: DailyUpdateInput["raw"]["scoreboardToday"],
+  timeZone?: string,
+): TonightGamePayload[] {
+  return scoreboardToday.scoreboard.games.map((game) => ({
+    timePacific: formatPacificTime(game, timeZone),
     away: formatTeamName(game.awayTeam),
     home: formatTeamName(game.homeTeam),
     broadcast: formatBroadcast(game),

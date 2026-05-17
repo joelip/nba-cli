@@ -6,6 +6,7 @@ import type { StatsResultSetsResponse } from "../models/statsResultSets";
 import { espnToScoreboardV3 } from "../normalize/espnToScoreboardV3";
 import { espnToStandings } from "../normalize/espnToStandings";
 import {
+  buildAfternoonUpdatePayload,
   buildDailyUpdatePayload,
   formatAfternoonUpdate,
   formatDailyUpdate,
@@ -194,7 +195,7 @@ async function run() {
       return;
     }
     case "todays-schedule": {
-      const { payload } = await buildDailyUpdateCommandContext(options);
+      const payload = await buildTodaysSchedulePayload(options);
       console.log(formatAfternoonUpdate(payload));
       return;
     }
@@ -401,13 +402,7 @@ Usage:
 
 Options:
   --today        Date in YYYY-MM-DD format (defaults to today in PT).
-  --yesterday    Date in YYYY-MM-DD format (defaults to yesterday in PT).
   --timezone     IANA timezone (default: America/Los_Angeles).
-  --season       Season in YYYY-YY format for standings (default: derived from today).
-  --no-standings Skip standings fetch.
-  --team         Focus team name (default: Kings).
-  --team-city    Focus team city (default: Sacramento).
-  --team-slug    Focus team slug (default: kings).
   -h, --help     Show this help message.
 `);
 }
@@ -497,91 +492,12 @@ async function buildDailyUpdateCommandContext(
 
   const espnClient = new ESPNClient();
   const statsClient = new StatsClient({ timeoutMs: 10_000 });
-  let scoreboardYesterday: ScoreboardV3Response | undefined;
-  let scoreboardToday: ScoreboardV3Response | undefined;
   let standings: StatsResultSetsResponse | undefined;
 
-  // ESPN first
-  const [espnYesterdayResult, espnTodayResult] = await Promise.all([
-    espnClient.scoreboard(yesterdayISO).then(
-      (response) => ({ response, ok: true }),
-      (error) => {
-        console.error(
-          `[nba-cli] ESPN scoreboard failed for ${yesterdayISO}: ${
-            error instanceof Error ? error.message : error
-          }`,
-        );
-        return {
-          response: undefined as Awaited<ReturnType<typeof espnClient.scoreboard>> | undefined,
-          ok: false,
-        };
-      },
-    ),
-    espnClient.scoreboard(todayISO).then(
-      (response) => ({ response, ok: true }),
-      (error) => {
-        console.error(
-          `[nba-cli] ESPN scoreboard failed for ${todayISO}: ${
-            error instanceof Error ? error.message : error
-          }`,
-        );
-        return {
-          response: undefined as Awaited<ReturnType<typeof espnClient.scoreboard>> | undefined,
-          ok: false,
-        };
-      },
-    ),
+  const [scoreboardYesterday, scoreboardToday] = await Promise.all([
+    fetchScoreboardWithFallback(yesterdayISO, { espnClient, statsClient }),
+    fetchScoreboardWithFallback(todayISO, { espnClient, statsClient }),
   ]);
-
-  if (espnYesterdayResult.ok) {
-    scoreboardYesterday = espnToScoreboardV3(espnYesterdayResult.response, yesterdayISO);
-  }
-  if (espnTodayResult.ok) {
-    scoreboardToday = espnToScoreboardV3(espnTodayResult.response, todayISO);
-  }
-
-  // stats.nba.com fallback for any that failed
-  if (!scoreboardYesterday || !scoreboardToday) {
-    const [statsYesterdayResult, statsTodayResult] = await Promise.all([
-      !scoreboardYesterday
-        ? statsClient.scoreboardV3(yesterdayISO).then(
-            (response) => ({ response, ok: true }),
-            (error) => {
-              console.error(
-                `[nba-cli] stats.nba.com scoreboard failed for ${yesterdayISO}: ${
-                  error instanceof Error ? error.message : error
-                }`,
-              );
-              return { response: undefined as ScoreboardV3Response | undefined, ok: false };
-            },
-          )
-        : Promise.resolve({ response: undefined as ScoreboardV3Response | undefined, ok: true }),
-      !scoreboardToday
-        ? statsClient.scoreboardV3(todayISO).then(
-            (response) => ({ response, ok: true }),
-            (error) => {
-              console.error(
-                `[nba-cli] stats.nba.com scoreboard failed for ${todayISO}: ${
-                  error instanceof Error ? error.message : error
-                }`,
-              );
-              return { response: undefined as ScoreboardV3Response | undefined, ok: false };
-            },
-          )
-        : Promise.resolve({ response: undefined as ScoreboardV3Response | undefined, ok: true }),
-    ]);
-
-    if (!scoreboardYesterday && statsYesterdayResult.ok) {
-      scoreboardYesterday = statsYesterdayResult.response;
-    }
-    if (!scoreboardToday && statsTodayResult.ok) {
-      scoreboardToday = statsTodayResult.response;
-    }
-  }
-
-  if (!scoreboardYesterday || !scoreboardToday) {
-    throw new Error("Unable to fetch scoreboard data from ESPN or stats.nba.com fallback.");
-  }
 
   // Standings: ESPN first, stats.nba.com fallback
   if (!isTruthyOption(options, "no-standings") && !config?.skipStandings) {
@@ -636,8 +552,36 @@ async function buildDailyUpdateCommandContext(
   };
 }
 
-async function fetchScoreboardWithFallback(dateISO: string): Promise<ScoreboardV3Response> {
-  const espnClient = new ESPNClient();
+async function buildTodaysSchedulePayload(
+  options: ParsedOptions,
+): Promise<ReturnType<typeof buildAfternoonUpdatePayload>> {
+  const timeZone =
+    optionValue(options, "timezone") ??
+    optionValue(options, "tz") ??
+    "America/Los_Angeles";
+  const todayISO =
+    optionValue(options, "today") ?? getDateISOInTimeZone(new Date(), timeZone);
+  const scoreboardToday = await fetchScoreboardWithFallback(todayISO, {
+    espnClient: new ESPNClient(),
+    statsClient: new StatsClient({ timeoutMs: 10_000 }),
+  });
+
+  return buildAfternoonUpdatePayload({
+    todayISO,
+    timeZone,
+    scoreboardToday,
+  });
+}
+
+async function fetchScoreboardWithFallback(
+  dateISO: string,
+  clients?: {
+    espnClient?: ESPNClient;
+    statsClient?: StatsClient;
+  },
+): Promise<ScoreboardV3Response> {
+  const espnClient = clients?.espnClient ?? new ESPNClient();
+  const statsClient = clients?.statsClient ?? new StatsClient();
   try {
     return espnToScoreboardV3(await espnClient.scoreboard(dateISO), dateISO);
   } catch (error) {
@@ -646,8 +590,16 @@ async function fetchScoreboardWithFallback(dateISO: string): Promise<ScoreboardV
         error instanceof Error ? error.message : error
       }`,
     );
-    const statsClient = new StatsClient();
-    return statsClient.scoreboardV3(dateISO);
+    try {
+      return await statsClient.scoreboardV3(dateISO);
+    } catch (statsError) {
+      throw new Error(
+        `Unable to fetch scoreboard for ${dateISO} from ESPN or stats.nba.com fallback: ${
+          statsError instanceof Error ? statsError.message : statsError
+        }`,
+        { cause: statsError },
+      );
+    }
   }
 }
 
